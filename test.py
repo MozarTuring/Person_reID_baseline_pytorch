@@ -32,6 +32,7 @@ parser = argparse.ArgumentParser(description='Test')
 parser.add_argument('--gpu_ids',default='0', type=str,help='gpu_ids: e.g. 0  0,1,2  0,2')
 parser.add_argument('--which_epoch',default='last', type=str, help='0,1,2,3...or last')
 parser.add_argument('--test_dir',default='../Market/pytorch',type=str, help='./test_data')
+parser.add_argument('--model_dir',default='',type=str)
 parser.add_argument('--name', default='ft_ResNet50', type=str, help='save model path')
 parser.add_argument('--batchsize', default=256, type=int, help='batchsize')
 parser.add_argument('--linear_num', default=512, type=int, help='feature dimension: 512 or default or 0 (linear=False)')
@@ -47,7 +48,7 @@ parser.add_argument('--ms',default='1', type=str,help='multiple_scale: e.g. 1 1,
 opt = parser.parse_args()
 ###load config###
 # load the training config
-config_path = os.path.join('./model',opt.name,'opts.yaml')
+config_path = os.path.join(opt.model_dir, opt.name,'opts.yaml')
 with open(config_path, 'r') as stream:
         config = yaml.load(stream, Loader=yaml.FullLoader) # for the new pyyaml via 'conda install pyyaml'
 opt.fp16 = config['fp16'] 
@@ -135,25 +136,26 @@ if opt.PCB:
     ])
     h, w = 384, 192
 
-
+# import ipdb
+# ipdb.set_trace()
 data_dir = test_dir
 
 if opt.multi:
-    image_datasets = {x: datasets.ImageFolder( os.path.join(data_dir,x) ,data_transforms) for x in ['gallery','query','multi-query']}
+    image_datasets = {x: datasets.ImageFolder( os.path.join(data_dir,x) ,data_transforms) for x in ["body", "body_query"]}
     dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=opt.batchsize,
-                                             shuffle=False, num_workers=16) for x in ['gallery','query','multi-query']}
+                                             shuffle=False, num_workers=16) for x in ["body", "body_query"]}
 else:
-    image_datasets = {x: datasets.ImageFolder( os.path.join(data_dir,x) ,data_transforms) for x in ['gallery','query']}
+    image_datasets = {x: datasets.ImageFolder( os.path.join(data_dir,x) ,data_transforms) for x in ["body", "body_query"]}
     dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=opt.batchsize,
-                                             shuffle=False, num_workers=16) for x in ['gallery','query']}
-class_names = image_datasets['query'].classes
+                                             shuffle=False, num_workers=16) for x in ["body", "body_query"]}
+# class_names = image_datasets['query'].classes
 use_gpu = torch.cuda.is_available()
 
 ######################################################################
 # Load model
 #---------------------------
 def load_network(network):
-    save_path = os.path.join('./model',name,'net_%s.pth'%opt.which_epoch)
+    save_path = os.path.join(opt.model_dir,name,'net_%s.pth'%opt.which_epoch)
     network.load_state_dict(torch.load(save_path))
     return network
 
@@ -239,11 +241,11 @@ def get_id(img_path):
         camera_id.append(int(camera[0]))
     return camera_id, labels
 
-gallery_path = image_datasets['gallery'].imgs
-query_path = image_datasets['query'].imgs
+gallery_path = image_datasets['body'].imgs
+query_path = image_datasets['body_query'].imgs
 
-gallery_cam,gallery_label = get_id(gallery_path)
-query_cam,query_label = get_id(query_path)
+# gallery_cam,gallery_label = get_id(gallery_path)
+# query_cam,query_label = get_id(query_path)
 
 if opt.multi:
     mquery_path = image_datasets['multi-query'].imgs
@@ -310,21 +312,25 @@ print(model)
 # Extract feature
 since = time.time()
 with torch.no_grad():
-    gallery_feature = extract_feature(model,dataloaders['gallery'])
-    query_feature = extract_feature(model,dataloaders['query'])
-    if opt.multi:
-        mquery_feature = extract_feature(model,dataloaders['multi-query'])
+    gallery_feature = extract_feature(model,dataloaders['body'])
+    query_feature = extract_feature(model,dataloaders['body_query'])
+    # if opt.multi:
+    #     mquery_feature = extract_feature(model,dataloaders['multi-query'])
 time_elapsed = time.time() - since
 print('Training complete in {:.0f}m {:.2f}s'.format(
             time_elapsed // 60, time_elapsed % 60))
 # Save to Matlab for check
-result = {'gallery_f':gallery_feature.numpy(),'gallery_label':gallery_label,'gallery_cam':gallery_cam,'query_f':query_feature.numpy(),'query_label':query_label,'query_cam':query_cam}
-scipy.io.savemat('pytorch_result.mat',result)
+result = {'gallery_f':gallery_feature.numpy(), 'query_f':query_feature.numpy()}
+scipy.io.savemat(os.path.join(opt.test_dir,'pytorch_result.mat'),result)
 
-print(opt.name)
-result = './model/%s/result.txt'%opt.name
-os.system('python evaluate_gpu.py | tee -a %s'%result)
+# print(opt.name)
+# result = './model/%s/result.txt'%opt.name
+# os.system('python evaluate_gpu.py | tee -a %s'%result)
 
-if opt.multi:
-    result = {'mquery_f':mquery_feature.numpy(),'mquery_label':mquery_label,'mquery_cam':mquery_cam}
-    scipy.io.savemat('multi_query.mat',result)
+# if opt.multi:
+#     result = {'mquery_f':mquery_feature.numpy(),'mquery_label':mquery_label,'mquery_cam':mquery_cam}
+#     scipy.io.savemat('multi_query.mat',result)
+
+
+
+# python test.py --gpu_ids 0 --name ft_ResNet50 --batchsize 32 --which_epoch 59 --model_dir model0210 --test_dir ../camera1_bak

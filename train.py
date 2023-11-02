@@ -540,3 +540,4 @@ if fp16:
 model = train_model(model, criterion, optimizer_ft, exp_lr_scheduler,
                        num_epochs=opt.total_epoch)
 
+# python train.py --gpu_ids 0 --name ft_ResNet50 --train_all --batchsize 32
